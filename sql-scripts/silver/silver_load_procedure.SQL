@@ -1,6 +1,6 @@
 /*
 ===============================================================================
-Stored Procedure: Bulk Load Silver Layer (Source -> Silver)
+Stored Procedure: Load Silver Layer (Source -> Silver)
 ===============================================================================
 Script Purpose:
     This stored procedure performs the Extract, Transform, and Load (ETL) the
