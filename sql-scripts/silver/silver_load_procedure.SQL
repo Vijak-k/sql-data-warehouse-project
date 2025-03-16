@@ -1,6 +1,6 @@
 /*
 ===============================================================================
-Stored Procedure: Load Silver Layer (Source -> Silver)
+Stored Procedure: Bulk Load Silver Layer (Source -> Silver)
 ===============================================================================
 Script Purpose:
     This stored procedure performs the Extract, Transform, and Load (ETL) the
@@ -98,7 +98,7 @@ BEGIN
 				WHEN 'S' THEN 'Other Sales'
 				WHEN 'T' THEN 'Touring'
 				ELSE 'n/a'
-			END AS prd_line, -- Map product line codes to  descriptive values
+			END AS prd_line, -- Map product line codes to descriptive values
 			CAST(prd_start_dt AS DATE) AS prd_start_dt,
 			CAST(
 				LEAD(prd_start_dt) OVER (PARTITION BY prd_key ORDER BY prd_start_dt)-1
@@ -145,7 +145,39 @@ BEGIN
 				 THEN sls_sales/NULLIF(sls_quantity, 0)
 				 ELSE sls_price
 			END AS sls_price
-		FROM bronze.crm_sales_details;
+		FROM (
+			SELECT
+				csd.sls_ord_num,
+				csd.sls_prd_key,
+				csd.sls_cust_id,
+				CASE WHEN csd.sls_ord_num IN (
+							SELECT sls_ord_num
+							FROM bronze.crm_sales_details
+							GROUP BY sls_ord_num
+							HAVING COUNT(DISTINCT sls_order_dt) > 1)
+					THEN cod.sls_order_dt
+					ELSE csd.sls_order_dt
+				END AS sls_order_dt,
+				csd.sls_ship_dt,
+				csd.sls_due_dt,
+				csd.sls_sales,
+				csd.sls_quantity,
+				csd.sls_price
+			FROM bronze.crm_sales_details csd
+			LEFT JOIN (
+				SELECT
+					DISTINCT sls_ord_num,
+					sls_order_dt
+				FROM bronze.crm_sales_details
+				WHERE sls_ord_num IN (
+						SELECT sls_ord_num
+						FROM bronze.crm_sales_details
+						GROUP BY sls_ord_num
+						HAVING COUNT(DISTINCT sls_order_dt) > 1)
+				AND LEN(sls_order_dt) = 8
+				) cod
+				ON csd.sls_ord_num = cod.sls_ord_num
+		) t -- impute missing order date in multiple items order
 		SET @end_time = GETDATE();
 		PRINT '>>> Load Duration: ' + CAST(DATEDIFF(second, @start_time, @end_time) AS NVARCHAR) + ' seconds';
 		PRINT '------------';
